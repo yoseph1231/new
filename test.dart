@@ -1,108 +1,133 @@
 import 'dart:io';
+import 'dart:math';
 
-class Product {
+class Character {
   String name;
-  int price;
+  int health;
+  int attackPower;
+  int defense;
 
-  Product(this.name, this.price);
+  Character(this.name, this.health, this.attackPower, this.defense);
+
+  void showStatus() {
+    print('$name - 체력: $health, 공격력: $attackPower, 방어력: $defense');
+  }
 }
 
-class ShoppingMall {
-  List<Product> products = [
-    Product('셔츠', 45000),
-    Product('원피스', 30000),
-    Product('반팔티', 35000),
-    Product('반바지', 38000),
-    Product('양말', 5000),
-  ];
+class Monster {
+  String name;
+  int health;
+  int attackPower;
 
-  int totalPrice = 0;
-  Map<String, int> cart = {};
+  Monster(this.name, this.health, this.attackPower);
 
-  void showProducts() {
-    print('\n상품 목록:');
-    for (var product in products) {
-      print('${product.name} / ${product.price}원');
+  void showStatus() {
+    print('$name - 체력: $health, 공격력: $attackPower');
+  }
+}
+
+class Game {
+  late Character player;
+  List<Monster> monsters = [];
+  Random random = Random();
+
+  void loadCharacter() {
+    try {
+      final file = File('characters.txt');
+      final contents = file.readAsStringSync().trim();
+      final stats = contents.split(',');
+
+      if (stats.length != 3) throw FormatException('캐릭터 데이터 오류');
+
+      print('캐릭터 이름을 입력하세요:');
+      String name = stdin.readLineSync()!.trim();
+      if (!RegExp(r'^[a-zA-Z가-힣]+$').hasMatch(name)) {
+        print('잘못된 이름입니다. 한글 또는 영문만 입력하세요.');
+        return;
+      }
+
+      player = Character(name, int.parse(stats[0]), int.parse(stats[1]), int.parse(stats[2]));
+      print('\n게임을 시작합니다!');
+      player.showStatus();
+    } catch (e) {
+      print('캐릭터 정보를 불러오지 못했습니다: $e');
+      exit(1);
     }
   }
 
-  void addToCart() {
-    stdout.write('\n상품 이름을 입력해 주세요: ');
-    String? productName = stdin.readLineSync()?.trim();
-    if (productName == null || productName.isEmpty ||
-        !products.any((p) => p.name == productName)) {
-      print('입력값이 올바르지 않아요!');
-      return;
-    }
-
-    stdout.write('상품 개수를 입력해 주세요: ');
-    String? quantityInput = stdin.readLineSync()?.trim();
-    int? quantity = int.tryParse(quantityInput ?? '');
-    if (quantity == null || quantity <= 0) {
-      print('0개보다 많은 개수의 상품만 담을 수 있어요!');
-      return;
-    }
-
-    var product = products.firstWhere((p) => p.name == productName);
-    totalPrice += product.price * quantity;
-    cart[productName] = (cart[productName] ?? 0) + quantity;
-    print('장바구니에 상품이 담겼어요!');
-  }
-
-  void showTotal() {
-    print('\n장바구니에 $totalPrice원 어치를 담으셨네요!');
-  }
-
-  void showCart() {
-    print('\n장바구니 목록:');
-    if (cart.isEmpty) {
-      print('장바구니가 비어 있습니다.');
-    } else {
-      cart.forEach((name, quantity) {
-        var price = products.firstWhere((p) => p.name == name).price;
-        print('$name x $quantity = ${price * quantity}원');
-      });
+  void loadMonsters() {
+    try {
+      final file = File('monsters.txt');
+      final contents = file.readAsLinesSync();
+      
+      for (var line in contents) {
+        var stats = line.split(',');
+        if (stats.length != 3) continue;
+        monsters.add(Monster(stats[0], int.parse(stats[1]), int.parse(stats[2])));
+      }
+    } catch (e) {
+      print('몬스터 정보를 불러오지 못했습니다: $e');
+      exit(1);
     }
   }
 
-  void clearCart() {
-    cart.clear();
-    totalPrice = 0;
-    print('장바구니가 초기화되었습니다.');
+  void saveResult(bool isWin) {
+    print('결과를 저장하시겠습니까? (y/n)');
+    String? input = stdin.readLineSync()?.trim().toLowerCase();
+    if (input == 'y') {
+      try {
+        final file = File('result.txt');
+        file.writeAsStringSync('${player.name}, ${player.health}, ${isWin ? '승리' : '패배'}');
+        print('결과가 저장되었습니다!');
+      } catch (e) {
+        print('결과 저장 실패: $e');
+      }
+    }
+  }
+
+  void startGame() {
+    loadCharacter();
+    loadMonsters();
+    
+    for (var monster in monsters) {
+      print('\n새로운 몬스터가 나타났습니다!');
+      monster.showStatus();
+      
+      while (player.health > 0 && monster.health > 0) {
+        print('\n${player.name}의 턴');
+        print('행동을 선택하세요 (1: 공격, 2: 방어):');
+        String? action = stdin.readLineSync()?.trim();
+        
+        if (action == '1') {
+          monster.health -= player.attackPower;
+          print('${player.name}이(가) ${monster.name}에게 ${player.attackPower}의 데미지를 입혔습니다.');
+        } else if (action == '2') {
+          int recovered = min(player.defense, monster.attackPower);
+          player.health += recovered;
+          print('${player.name}이(가) 방어하여 ${recovered}만큼 체력을 회복했습니다.');
+        }
+
+        if (monster.health > 0) {
+          int damage = max(monster.attackPower - player.defense, 0);
+          player.health -= damage;
+          print('${monster.name}이(가) ${player.name}에게 ${damage}의 데미지를 입혔습니다.');
+        }
+      }
+      
+      if (player.health <= 0) {
+        print('\n패배했습니다.');
+        saveResult(false);
+        return;
+      }
+      print('${monster.name}을(를) 물리쳤습니다!');
+    }
+    
+    print('\n축하합니다! 모든 몬스터를 물리쳤습니다!');
+    saveResult(true);
   }
 }
 
 void main() {
-  ShoppingMall mall = ShoppingMall();
-  bool running = true;
-
-  while (running) {
-    print('\n[1] 상품 목록 보기 / [2] 장바구니에 담기 / [3] 장바구니 총 가격 보기 / [4] 장바구니 보기 / [5] 장바구니 초기화 / [6] 프로그램 종료');
-    stdout.write('선택: ');
-    String? choice = stdin.readLineSync()?.trim();
-
-    switch (choice) {
-      case '1':
-        mall.showProducts();
-        break;
-      case '2':
-        mall.addToCart();
-        break;
-      case '3':
-        mall.showTotal();
-        break;
-      case '4':
-        mall.showCart();
-        break;
-      case '5':
-        mall.clearCart();
-        break;
-      case '6':
-        print('이용해 주셔서 감사합니다 ~ 안녕히 가세요!');
-        running = false;
-        break;
-      default:
-        print('지원하지 않는 기능입니다! 다시 시도해 주세요..');
-    }
-  }
+  Game game = Game();
+  game.startGame();
 }
